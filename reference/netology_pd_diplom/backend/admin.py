@@ -3,11 +3,12 @@ from django.contrib.auth.admin import UserAdmin
 
 from backend.models import User, Shop, Category, Product, ProductInfo, Parameter, ProductParameter, Order, OrderItem, \
     Contact, ConfirmEmailToken
+from django.shortcuts import render
 
-from django.utils.html import format_html
-from celery.result import AsyncResult
 from backend.models import TaskStatus, Shop
 from backend.tasks import load_data_from_url
+
+from reference.netology_pd_diplom.backend import forms
 
 
 @admin.register(TaskStatus)
@@ -34,41 +35,38 @@ class CustomUserAdmin(UserAdmin):
     list_display = ('email', 'first_name', 'last_name', 'is_staff')
 
 
+# Создаем форму для указания URL, чтобы запускать задачу с URL, указанным администратором.
+class LoadDataForm(forms.Form):
+    url = forms.URLField(label='URL для загрузки данных', required=True)
+
+
+# Добавляем в модель Admin для Shop новую функцию start_load_data_task
+@admin.action(description="Запустить задачу загрузки данных для выбранных магазинов")
+def start_load_data_task(self, request, queryset):
+    form = LoadDataForm(request.POST or None)
+
+    if 'apply' in request.POST:  # Обработка отправки формы
+        if form.is_valid():
+            url = form.cleaned_data['url']
+            for shop in queryset:
+                task = load_data_from_url.apply_async(args=[url, shop.user_id])
+
+                # Создание записи TaskStatus для отслеживания выполнения задачи
+                TaskStatus.objects.create(
+                    user=shop.user,
+                    task_id=task.id,
+                    status='PENDING'
+                )
+            self.message_user(request, "Задача загружена в очередь")
+            return None
+
+    # Если форма еще не отправлена, показать ее в админке
+    return render(request, 'admin/run_task_form.html', {'form': form, 'shops': queryset})
+
+
 @admin.register(Shop)
 class ShopAdmin(admin.ModelAdmin):
-    list_display = ('name', 'user', 'run_task', 'check_task_status')
-
-    actions = ['start_load_data_task']
-
-    def start_load_data_task(self, request, queryset):
-        for shop in queryset:
-            # URL для загрузки данных можно хранить в модели Shop или получать из другого источника
-            url = shop.data_url  # Предполагаем, что у модели есть поле `data_url`
-            task = load_data_from_url.apply_async(args=[url, shop.user_id])
-
-            # Создание записи TaskStatus для отслеживания статуса
-            TaskStatus.objects.create(
-                user=shop.user,
-                task_id=task.id,
-                status='PENDING'
-            )
-        self.message_user(request, "Задача загружена в очередь")
-
-    start_load_data_task.short_description = 'Запустить задачу загрузки данных'
-
-    def run_task(self, obj):
-        """Создание кнопки для запуска задачи"""
-        return format_html(
-            '<a class="button" href="{}">Запустить задачу</a>',
-            f'/admin/run_task/{obj.id}/'
-        )
-
-    def check_task_status(self, obj):
-        """Показать статус задачи"""
-        task = TaskStatus.objects.filter(user=obj.user).order_by('-created_at').first()
-        if task:
-            return format_html('<span>{}</span>', task.status)
-        return "Нет задачи"
+    actions = [start_load_data_task]
 
 
 @admin.register(Category)
