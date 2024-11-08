@@ -15,8 +15,10 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from backend.views import run_task_view
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('admin/run_task/<int:shop_id>/', run_task_view, name='run_task_view'),
     path('api/v1/', include('backend.urls', namespace='backend'))
 ]

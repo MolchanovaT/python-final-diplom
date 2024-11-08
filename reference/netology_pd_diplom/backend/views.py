@@ -13,10 +13,38 @@ from ujson import loads as load_json
 from backend.tasks import load_data_from_url
 
 from backend.models import Shop, Category, Product, ProductInfo, Parameter, ProductParameter, Order, OrderItem, \
-    Contact, ConfirmEmailToken
+    Contact, ConfirmEmailToken, TaskStatus
 from backend.serializers import UserSerializer, CategorySerializer, ShopSerializer, ProductInfoSerializer, \
     OrderItemSerializer, OrderSerializer, ContactSerializer
 from backend.signals import new_user_registered, new_order
+
+from django.shortcuts import redirect, render
+from django.contrib import admin, messages
+
+from reference.netology_pd_diplom.backend.forms import LoadDataForm
+
+
+def run_task_view(request, shop_id):
+    if request.method == 'POST':
+        form = LoadDataForm(request.POST)
+        if form.is_valid():
+            url = form.cleaned_data['url']
+            user_id = request.user.id
+            task = load_data_from_url.apply_async(args=[url, user_id])
+
+            # Создание записи TaskStatus для отслеживания выполнения задачи
+            TaskStatus.objects.create(
+                user=request.user,
+                task_id=task.id,
+                status='PENDING'
+            )
+
+            messages.info(request, "Задача загружена в очередь")
+            return redirect('/admin/backend/shop/')
+    else:
+        form = LoadDataForm()
+
+    return render(request, 'admin/run_task_form.html', {'form': form})
 
 
 class RegisterAccount(APIView):

@@ -4,6 +4,17 @@ from django.contrib.auth.admin import UserAdmin
 from backend.models import User, Shop, Category, Product, ProductInfo, Parameter, ProductParameter, Order, OrderItem, \
     Contact, ConfirmEmailToken
 
+from django.utils.html import format_html
+from celery.result import AsyncResult
+from backend.models import TaskStatus, Shop
+from backend.tasks import load_data_from_url
+
+
+@admin.register(TaskStatus)
+class TaskStatusAdmin(admin.ModelAdmin):
+    list_display = ('task_id', 'user', 'status', 'created_at', 'updated_at')
+    readonly_fields = ('task_id', 'status', 'user', 'created_at', 'updated_at')
+
 
 @admin.register(User)
 class CustomUserAdmin(UserAdmin):
@@ -25,7 +36,39 @@ class CustomUserAdmin(UserAdmin):
 
 @admin.register(Shop)
 class ShopAdmin(admin.ModelAdmin):
-    pass
+    list_display = ('name', 'user', 'run_task', 'check_task_status')
+
+    actions = ['start_load_data_task']
+
+    def start_load_data_task(self, request, queryset):
+        for shop in queryset:
+            # URL для загрузки данных можно хранить в модели Shop или получать из другого источника
+            url = shop.data_url  # Предполагаем, что у модели есть поле `data_url`
+            task = load_data_from_url.apply_async(args=[url, shop.user_id])
+
+            # Создание записи TaskStatus для отслеживания статуса
+            TaskStatus.objects.create(
+                user=shop.user,
+                task_id=task.id,
+                status='PENDING'
+            )
+        self.message_user(request, "Задача загружена в очередь")
+
+    start_load_data_task.short_description = 'Запустить задачу загрузки данных'
+
+    def run_task(self, obj):
+        """Создание кнопки для запуска задачи"""
+        return format_html(
+            '<a class="button" href="{}">Запустить задачу</a>',
+            f'/admin/run_task/{obj.id}/'
+        )
+
+    def check_task_status(self, obj):
+        """Показать статус задачи"""
+        task = TaskStatus.objects.filter(user=obj.user).order_by('-created_at').first()
+        if task:
+            return format_html('<span>{}</span>', task.status)
+        return "Нет задачи"
 
 
 @admin.register(Category)
