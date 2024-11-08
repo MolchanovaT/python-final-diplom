@@ -21,7 +21,7 @@ from backend.signals import new_user_registered, new_order
 from django.shortcuts import redirect, render
 from django.contrib import admin, messages
 
-from reference.netology_pd_diplom.backend.forms import LoadDataForm
+from backend.forms import LoadDataForm
 
 
 def run_task_view(request, shop_id):

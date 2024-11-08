@@ -7,8 +7,6 @@ from django_rest_passwordreset.tokens import get_token_generator
 from django.db import models
 from django.contrib.auth import get_user_model
 
-User = get_user_model()
-
 STATE_CHOICES = (
     ('basket', 'Статус корзины'),
     ('new', 'Новый'),
@@ -27,17 +25,6 @@ USER_TYPE_CHOICES = (
 
 
 # Create your models here.
-
-
-class TaskStatus(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='tasks', verbose_name='Пользователь')
-    task_id = models.CharField(max_length=255, unique=True, verbose_name='ID задачи')
-    status = models.CharField(max_length=50, verbose_name='Статус задачи', default='PENDING')
-    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Дата создания')
-    updated_at = models.DateTimeField(auto_now=True, verbose_name='Дата обновления')
-
-    def __str__(self):
-        return f'Задача {self.task_id} - {self.status}'
 
 
 class UserManager(BaseUserManager):
@@ -317,3 +304,17 @@ class ConfirmEmailToken(models.Model):
 
     def __str__(self):
         return "Password reset token for user {user}".format(user=self.user)
+
+
+User = get_user_model()
+
+
+class TaskStatus(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='tasks', verbose_name='Пользователь')
+    task_id = models.CharField(max_length=255, unique=True, verbose_name='ID задачи')
+    status = models.CharField(max_length=50, verbose_name='Статус задачи', default='PENDING')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Дата создания')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Дата обновления')
+
+    def __str__(self):
+        return f'Задача {self.task_id} - {self.status}'

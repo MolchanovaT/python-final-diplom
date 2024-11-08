@@ -7,8 +7,7 @@ from django.shortcuts import render
 
 from backend.models import TaskStatus, Shop
 from backend.tasks import load_data_from_url
-
-from reference.netology_pd_diplom.backend import forms
+from backend.forms import LoadDataForm
 
 
 @admin.register(TaskStatus)
@@ -33,11 +32,6 @@ class CustomUserAdmin(UserAdmin):
         ('Important dates', {'fields': ('last_login', 'date_joined')}),
     )
     list_display = ('email', 'first_name', 'last_name', 'is_staff')
-
-
-# Создаем форму для указания URL, чтобы запускать задачу с URL, указанным администратором.
-class LoadDataForm(forms.Form):
-    url = forms.URLField(label='URL для загрузки данных', required=True)
 
 
 # Добавляем в модель Admin для Shop новую функцию start_load_data_task
