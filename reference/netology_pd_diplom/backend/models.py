@@ -316,5 +316,8 @@ class TaskStatus(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Дата создания')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='Дата обновления')
 
+    class Meta:
+        verbose_name = 'Статус запущенных задач'
+
     def __str__(self):
         return f'Задача {self.task_id} - {self.status}'

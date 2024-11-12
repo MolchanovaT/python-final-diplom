@@ -3,7 +3,7 @@ import os
 from celery import Celery
 
 # Устанавливаем default Django settings module
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'netology_pd_diplom.settings')
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'netology_pd_diplom.netology_pd_diplom.settings')
 
 app = Celery('netology_pd_diplom')
 
