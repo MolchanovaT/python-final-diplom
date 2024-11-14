@@ -1,12 +1,13 @@
-from django.test import TestCase
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
+
+from backend.models import User, ConfirmEmailToken, TaskStatus, Shop, Category, Product, Parameter, \
+    ProductParameter
 from backend.tasks import (
     send_email, send_password_reset_token, send_registration_confirmation,
     send_new_order_notification, load_data_from_url
 )
-from backend.models import User, ConfirmEmailToken, TaskStatus, Shop, Category, Product, ProductInfo, Parameter, \
-    ProductParameter
 from django.core.mail import EmailMultiAlternatives
+from django.test import TestCase
 
 
 class EmailTaskTests(TestCase):
@@ -60,8 +61,8 @@ class LoadDataFromURLTaskTests(TestCase):
         }]
     })
     def test_load_data_from_url_success(self, mock_yaml_load, mock_get):
-        task_status = TaskStatus.objects.create(task_id='123', status='PENDING')
         user = User.objects.create(email="shopuser@example.com")
+        task_status = TaskStatus.objects.create(task_id='123', status='PENDING', user=user)
 
         # Вызов задачи и проверка статуса выполнения
         load_data_from_url("http://example.com/data.yaml", user.id, task_status.task_id)
@@ -79,8 +80,10 @@ class LoadDataFromURLTaskTests(TestCase):
     @patch('backend.tasks.get')
     @patch('backend.tasks.yaml.load', side_effect=Exception("Error loading data"))
     def test_load_data_from_url_failure(self, mock_yaml_load, mock_get):
-        task_status = TaskStatus.objects.create(task_id='123', status='PENDING')
-        user = User.objects.create(email="shopuser@example.com")
+        user = User.objects.create(email="shopuser@example.com")  # создаем пользователя
+
+        # Создаем TaskStatus с обязательным полем user_id
+        task_status = TaskStatus.objects.create(task_id='123', status='PENDING', user=user)
 
         # Вызов задачи и проверка статуса выполнения
         load_data_from_url("http://example.com/data.yaml", user.id, task_status.task_id)
