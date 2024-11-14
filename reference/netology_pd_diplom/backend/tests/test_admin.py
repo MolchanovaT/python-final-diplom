@@ -5,6 +5,7 @@ from unittest.mock import patch
 from backend.admin import start_load_data_task, TaskStatusAdmin, ShopAdmin
 from backend.models import TaskStatus, Shop
 from backend.forms import LoadDataForm
+from django.contrib import admin
 
 User = get_user_model()
 

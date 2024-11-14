@@ -162,7 +162,7 @@ class TestConfirmAccount(TestCase):
         request = self.factory.post('/confirm-account/', data=data)
         response = ConfirmAccount.as_view()(request)
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.content, b'{"Status": false, "Errors": "Неправильно указан токен или email"}')
+        self.assertEqual(response.content, b'{"Status": false, "Errors": "Wrong token or email"}')
         self.assertFalse(User.objects.get(email='test@example.com').is_active)
         self.assertTrue(ConfirmEmailToken.objects.filter(user=self.user).exists())
 
@@ -171,7 +171,7 @@ class TestConfirmAccount(TestCase):
         request = self.factory.post('/confirm-account/', data=data)
         response = ConfirmAccount.as_view()(request)
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.content, b'{"Status": false, "Errors": "Не указаны все необходимые аргументы"}')
+        self.assertEqual(response.content, b'{"Status": false, "Errors": "Not all required arguments specified"}')
         self.assertFalse(User.objects.get(email='test@example.com').is_active)
         self.assertTrue(ConfirmEmailToken.objects.filter(user=self.user).exists())
 
@@ -265,7 +265,7 @@ class TestLoginAccount(APITestCase):
         response = LoginAccount.as_view()(request)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.json()['Status'], False)
-        self.assertEqual(response.json()['Errors'], 'Не указаны все необходимые аргументы')
+        self.assertEqual(response.json()['Errors'], 'Not all required arguments specified')
 
     def test_login_account_post_inactive_user(self):
         self.user.is_active = False
@@ -275,7 +275,7 @@ class TestLoginAccount(APITestCase):
         response = LoginAccount.as_view()(request)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.json()['Status'], False)
-        self.assertEqual(response.json()['Errors'], 'Не удалось авторизовать')
+        self.assertEqual(response.json()['Errors'], 'Failed to authorize')
 
 
 class ShopViewTests(TestCase):
@@ -522,7 +522,7 @@ class TestPartnerState(APITestCase):
         self.factory.force_authenticate(user=self.user)
         response = self.factory.post(reverse('partner-state'))
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.json(), {'Status': False, 'Errors': 'Не указаны все необходимые аргументы'})
+        self.assertEqual(response.json(), {'Status': False, 'Errors': 'Not all required arguments specified'})
 
     def test_partner_state_post_authenticated_invalid_state(self):
         self.factory.force_authenticate(user=self.user)
@@ -643,7 +643,7 @@ class TestContactView(APITestCase):
         response = self.client.delete(reverse('contact'), data, format='json')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['Status'], False)
-        self.assertEqual(response.data['Errors'], 'Не указаны все необходимые аргументы')
+        self.assertEqual(response.data['Errors'], 'Not all required arguments specified')
 
     def test_put_contact(self):
         contact = Contact.objects.create(user=self.user, city='city', street='street', phone='phone')
@@ -665,7 +665,7 @@ class TestContactView(APITestCase):
         response = self.client.put(reverse('contact'), data, format='json')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['Status'], False)
-        self.assertEqual(response.data['Errors'], 'Не указаны все необходимые аргументы')
+        self.assertEqual(response.data['Errors'], 'Not all required arguments specified')
 
 
 class TestOrderView(APITestCase):
