@@ -43,11 +43,14 @@ class ShopAdminTests(TestCase):
         self.factory = RequestFactory()
         self.shop = Shop.objects.create(name="Test Shop", user=self.user)
 
-    @patch("backend.admin.load_data_from_url.apply_async")
+    @patch("backend.admin.load_data_task.apply_async")
     def test_start_load_data_task_action_with_valid_url(self, mock_apply_async):
         """
         Тестирование действия `start_load_data_task` при корректном URL.
         """
+        # Настраиваем mock для apply_async
+        mock_apply_async.return_value.id = "test-task-id"  # Указываем фиксированное значение task_id
+
         url = reverse('admin:backend_shop_changelist')
         form_data = {'url': 'https://example.com/data.yaml', 'apply': '1'}
         request = self.factory.post(url, data=form_data)
@@ -56,14 +59,18 @@ class ShopAdminTests(TestCase):
         form = LoadDataForm(form_data)
         self.assertTrue(form.is_valid())
 
+        # Вызываем тестируемую функцию
         response = start_load_data_task(ShopAdmin(Shop, admin.site), request, [self.shop])
 
-        # Проверяем, что сообщение отправлено
+        # Проверяем результат
         self.assertIsNone(response)
         self.assertTrue(mock_apply_async.called)
         self.assertEqual(TaskStatus.objects.count(), 1)
+
+        # Проверяем, что запись TaskStatus содержит правильные данные
         task_status = TaskStatus.objects.first()
-        self.assertEqual(task_status.status, 'PENDING')
+        self.assertEqual(task_status.task_id, "test-task-id")
+        self.assertEqual(task_status.status, "PENDING")
         self.assertEqual(task_status.user, self.user)
 
     def test_start_load_data_task_action_invalid_url(self):

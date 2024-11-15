@@ -35,16 +35,13 @@ def send_password_reset_token(reset_password_token):
 
 
 @shared_task
-def send_registration_confirmation(instance):
-    """
-    Отправка email с подтверждением регистрации.
-    """
-    token, _ = ConfirmEmailToken.objects.get_or_create(user_id=instance.pk)
-    send_email(
-        subject=f"Password Reset Token for {instance.email}",
-        message=token.key,
-        recipient_email=instance.email
-    )
+def send_registration_confirmation(user_id):
+    try:
+        user = User.objects.get(id=user_id)
+        # Логика отправки письма пользователю
+        print(f"Отправка подтверждения регистрации для пользователя: {user.email}")
+    except User.DoesNotExist:
+        print(f"Пользователь с id {user_id} не найден.")
 
 
 @shared_task

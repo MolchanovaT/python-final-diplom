@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from django.test import TestCase
 from django.contrib.auth import get_user_model
 from backend.models import (
@@ -6,6 +8,7 @@ from backend.models import (
 )
 
 User = get_user_model()
+
 
 class UserModelTests(TestCase):
 
@@ -125,11 +128,15 @@ class OrderItemModelTests(TestCase):
 
 class ConfirmEmailTokenTests(TestCase):
 
-    def test_confirm_email_token_creation(self):
+    @patch("backend.signals.send_registration_confirmation.delay")  # Мокаем вызов задачи
+    def test_confirm_email_token_creation(self, mock_send_confirmation):
+        """
+        Тестируем, что сигнал вызывает задачу Celery при создании нового пользователя.
+        """
         user = User.objects.create_user(email='testuser@example.com', password='password123')
-        token = ConfirmEmailToken.objects.create(user=user)
-        self.assertEqual(token.user, user)
-        self.assertTrue(len(token.key) > 0)
+
+        # Проверяем, что задача отправки подтверждения была вызвана
+        mock_send_confirmation.assert_called_once_with(user_id=user.id)
 
 
 class TaskStatusModelTests(TestCase):

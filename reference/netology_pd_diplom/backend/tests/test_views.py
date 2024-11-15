@@ -26,11 +26,11 @@ from django.contrib.auth.password_validation import validate_password
 from django.contrib.messages import get_messages
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
-from django.test import RequestFactory, APITestCase
-from django.test import TestCase, APIClient
+from django.test import RequestFactory
+from django.test import TestCase
 from django.urls import reverse
 from rest_framework import status
-from rest_framework.test import APIClient
+from rest_framework.test import APIClient, APITestCase
 
 User = get_user_model()
 

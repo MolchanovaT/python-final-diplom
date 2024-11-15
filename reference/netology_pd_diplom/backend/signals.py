@@ -20,11 +20,9 @@ def password_reset_token_created(sender, instance, reset_password_token, **kwarg
 
 @receiver(post_save, sender=User)
 def new_user_registered_signal(sender, instance, created, **kwargs):
-    """
-    Отправляем письмо с подтверждением регистрации.
-    """
-    if created and not instance.is_active:
-        send_registration_confirmation.delay(instance)  # Используем Celery для отправки письма
+    if created:
+        # Передаем только user_id, вместо передачи целого объекта instance
+        send_registration_confirmation.delay(user_id=instance.id)
 
 
 @receiver(new_order)
