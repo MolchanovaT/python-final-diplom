@@ -68,11 +68,68 @@ class ProductSerializerTest(TestCase):
 
 
 class OrderSerializerTest(TestCase):
+
     def setUp(self):
+        """
+        Создаем базовые данные для тестов.
+        """
+        # Создаем пользователя
         self.user = User.objects.create(email="testuser@example.com")
+
+        # Создаем контакт
         self.contact = Contact.objects.create(user=self.user, city="Moscow", street="Main Street", phone="1234567890")
+
+        # Создаем заказ
         self.order = Order.objects.create(user=self.user, state="new", contact=self.contact, total_sum=1000)
+
+        # Создаем информацию о продукте
+        self.product_info = ProductInfo.objects.create(
+            product_id=1, shop_id=1, external_id=1, quantity=10, price=100, price_rrc=120
+        )
+
+        # Создаем заказанную позицию
+        self.order_item = OrderItem.objects.create(
+            order=self.order, product_info=self.product_info, quantity=2
+        )
+
+        # Сериализуем заказ
         self.serializer = OrderSerializer(instance=self.order)
 
     def test_order_serializer_fields(self):
-        self.assertEqual(set(self.serializer.data.keys()), {"id", "ordered_items", "state", "dt", "total_sum", "contact"})
+        """
+        Проверяем, что сериализатор возвращает правильные поля для Order.
+        """
+        expected_fields = {"id", "ordered_items", "state", "dt", "total_sum", "contact"}
+        actual_fields = set(self.serializer.data.keys())
+
+        self.assertEqual(actual_fields, expected_fields)
+
+    def test_order_serializer_data(self):
+        """
+        Проверяем, что сериализатор правильно возвращает данные для заказа.
+        """
+        data = self.serializer.data
+
+        # Проверяем правильность данных для полей
+        self.assertEqual(data["id"], self.order.id)
+        self.assertEqual(data["total_sum"], self.order.total_sum)
+        self.assertEqual(data["state"], self.order.state)
+        self.assertEqual(data["contact"]["id"], self.contact.id)
+        self.assertEqual(data["ordered_items"][0]["id"], self.order_item.id)
+        self.assertEqual(data["ordered_items"][0]["product_info"], self.product_info.id)
+        self.assertEqual(data["ordered_items"][0]["quantity"], self.order_item.quantity)
+
+    def test_order_serializer_read_only_fields(self):
+        """
+        Проверяем, что поля, которые должны быть read-only, действительно являются таковыми.
+        """
+        read_only_fields = {"id"}
+        for field in read_only_fields:
+            self.assertIn(field, self.serializer.fields)
+            self.assertTrue(self.serializer.fields[field].read_only)
+
+    def test_order_serializer_contact_read_only(self):
+        """
+        Проверяем, что поле 'contact' является read-only.
+        """
+        self.assertTrue(self.serializer.fields["contact"].read_only)

@@ -1,7 +1,6 @@
 from django.dispatch import receiver, Signal
 from django_rest_passwordreset.signals import reset_password_token_created
 from django.db.models.signals import post_save
-from django.dispatch import receiver
 from .tasks import send_password_reset_token, send_registration_confirmation, send_new_order_notification
 from backend.models import User
 
@@ -11,7 +10,7 @@ new_order = Signal()
 
 
 @receiver(reset_password_token_created)
-def password_reset_token_created(sender, instance, reset_password_token, **kwargs):
+def password_reset_token_created(reset_password_token, **kwargs):
     """
     Отправляем письмо с токеном для сброса пароля.
     """
@@ -19,7 +18,7 @@ def password_reset_token_created(sender, instance, reset_password_token, **kwarg
 
 
 @receiver(post_save, sender=User)
-def new_user_registered_signal(sender, instance, created, **kwargs):
+def new_user_registered_signal(instance, created, **kwargs):
     if created:
         # Передаем только user_id, вместо передачи целого объекта instance
         send_registration_confirmation.delay(user_id=instance.id)

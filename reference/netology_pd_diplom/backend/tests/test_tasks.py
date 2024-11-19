@@ -1,5 +1,6 @@
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
+import yaml
 from backend.models import User, ConfirmEmailToken, TaskStatus, Shop, Category, Product, Parameter, \
     ProductParameter
 from backend.tasks import (
@@ -8,6 +9,8 @@ from backend.tasks import (
 )
 from django.core.mail import EmailMultiAlternatives
 from django.test import TestCase
+
+from reference.netology_pd_diplom.backend.models import ProductInfo
 
 
 class EmailTaskTests(TestCase):
@@ -49,45 +52,92 @@ class EmailTaskTests(TestCase):
         )
 
 
-class LoadDataFromURLTaskTests(TestCase):
-    @patch('backend.tasks.get')
-    @patch('backend.tasks.yaml.load', return_value={
-        'shop': 'Test Shop',
-        'categories': [{'id': 1, 'name': 'Category 1'}],
-        'goods': [{
-            'id': 1, 'name': 'Product 1', 'category': 1, 'model': 'Model 1',
-            'price': 100, 'price_rrc': 120, 'quantity': 10,
-            'parameters': {'Param 1': 'Value 1'}
-        }]
-    })
-    def test_load_data_from_url_success(self, mock_yaml_load, mock_get):
-        user = User.objects.create(email="shopuser@example.com")
-        task_status = TaskStatus.objects.create(task_id='123', status='PENDING', user=user)
+class LoadDataFromUrlTaskTest(TestCase):
 
-        # Вызов задачи и проверка статуса выполнения
-        load_data_from_url("http://example.com/data.yaml", user.id, task_status.task_id)
+    @patch('django.core.validators.URLValidator')
+    @patch('requests.get')  # Мокаем запрос
+    @patch('your_app.models.TaskStatus')  # Мокаем модель TaskStatus
+    def test_load_data_from_url_success(self, MockTaskStatus, mock_get, mock_url_validator):
+        # Мокаем URLValidator
+        mock_url_validator.return_value = None  # Допускаем, что URL проходит валидацию без ошибок
 
-        task_status.refresh_from_db()
-        self.assertEqual(task_status.status, 'SUCCESS')
+        # Мокаем получение данных с URL
+        mock_response = MagicMock()
+        mock_response.content = yaml.dump({
+            'shop': 'Test Shop',
+            'categories': [
+                {'id': 1, 'name': 'Category 1'},
+                {'id': 2, 'name': 'Category 2'},
+            ],
+            'goods': [
+                {'id': 101, 'name': 'Product 1', 'category': 1, 'model': 'Model 1', 'price': 100, 'price_rrc': 120,
+                 'quantity': 10, 'parameters': {'color': 'black'}},
+                {'id': 102, 'name': 'Product 2', 'category': 2, 'model': 'Model 2', 'price': 150, 'price_rrc': 170,
+                 'quantity': 5, 'parameters': {'color': 'white'}}
+            ]
+        })
+        mock_get.return_value = mock_response
 
-        # Проверка, что магазин, категории, продукты и параметры были созданы
-        self.assertTrue(Shop.objects.filter(name="Test Shop").exists())
-        self.assertTrue(Category.objects.filter(id=1, name="Category 1").exists())
-        self.assertTrue(Product.objects.filter(name="Product 1").exists())
-        self.assertTrue(Parameter.objects.filter(name="Param 1").exists())
-        self.assertTrue(ProductParameter.objects.filter(value="Value 1").exists())
+        # Мокаем создание и обновление TaskStatus
+        mock_task_status = MagicMock(spec=TaskStatus)
+        mock_task_status.status = 'IN_PROGRESS'
+        mock_task_status.save = MagicMock()
+        MockTaskStatus.objects.get.return_value = mock_task_status
 
-    @patch('backend.tasks.get')
-    @patch('backend.tasks.yaml.load', side_effect=Exception("Error loading data"))
-    def test_load_data_from_url_failure(self, mock_yaml_load, mock_get):
-        user = User.objects.create(email="shopuser@example.com")  # создаем пользователя
+        # Создаем пользователя
+        user = User.objects.create(email="testuser@example.com")
 
-        # Создаем TaskStatus с обязательным полем user_id
-        task_status = TaskStatus.objects.create(task_id='123', status='PENDING', user=user)
+        # Запуск задачи
+        url = 'http://example.com/data.yaml'
+        user_id = user.id  # Используем ID пользователя, а не сам объект
+        task_id = 'task_12345'
 
-        # Вызов задачи и проверка статуса выполнения
-        load_data_from_url("http://example.com/data.yaml", user.id, task_status.task_id)
+        result = load_data_from_url(url, user_id, task_id)
 
-        task_status.refresh_from_db()
-        self.assertEqual(task_status.status, 'FAILED')
-        self.assertIn("Error loading data", task_status.error_message)
+        # Проверка изменений в статусе задачи
+        mock_task_status.save.assert_called_with(update_fields=['status'])
+        self.assertEqual(result['Status'], 'SUCCESS')
+
+        # Проверка, что объекты были созданы
+        self.assertEqual(Shop.objects.count(), 1)
+        self.assertEqual(Category.objects.count(), 2)
+        self.assertEqual(Product.objects.count(), 2)
+        self.assertEqual(ProductInfo.objects.count(), 2)
+        self.assertEqual(ProductParameter.objects.count(), 2)
+
+    @patch('django.core.validators.URLValidator')
+    @patch('requests.get')  # Мокаем запрос
+    @patch('your_app.models.TaskStatus')  # Мокаем модель TaskStatus
+    def test_load_data_from_url_failure(self, MockTaskStatus, mock_get, mock_url_validator):
+        # Мокаем URLValidator
+        mock_url_validator.return_value = None  # Допускаем, что URL проходит валидацию без ошибок
+
+        # Мокаем ошибку при получении данных
+        mock_get.side_effect = Exception("Network error")
+
+        # Мокаем создание и обновление TaskStatus
+        mock_task_status = MagicMock(spec=TaskStatus)
+        mock_task_status.status = 'IN_PROGRESS'
+        mock_task_status.save = MagicMock()
+        MockTaskStatus.objects.get.return_value = mock_task_status
+
+        # Создаем пользователя
+        user = User.objects.create(email="testuser@example.com")
+
+        # Запуск задачи
+        url = 'http://example.com/data.yaml'
+        user_id = user.id  # Используем ID пользователя
+        task_id = 'task_12345'
+
+        result = load_data_from_url(url, user_id, task_id)
+
+        # Проверка, что статус изменился на 'FAILED'
+        mock_task_status.save.assert_called_with(update_fields=['status'])
+        self.assertEqual(result['Status'], 'FAILED')
+
+        # Проверка, что объекты не были созданы
+        self.assertEqual(Shop.objects.count(), 0)
+        self.assertEqual(Category.objects.count(), 0)
+        self.assertEqual(Product.objects.count(), 0)
+        self.assertEqual(ProductInfo.objects.count(), 0)
+        self.assertEqual(ProductParameter.objects.count(), 0)

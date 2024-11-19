@@ -3,7 +3,7 @@ from django.contrib.auth.admin import UserAdmin
 
 from backend.models import User, Shop, Category, Product, ProductInfo, Parameter, ProductParameter, Order, OrderItem, \
     Contact, ConfirmEmailToken
-from django.shortcuts import render
+from django.shortcuts import render, redirect
 
 from backend.models import TaskStatus, Shop
 from backend.tasks import load_data_from_url
@@ -52,10 +52,11 @@ def start_load_data_task(self, request, queryset):
                     status='PENDING'
                 )
             self.message_user(request, "Задача загружена в очередь")
-            return None
+            return redirect('admin:backend_shop_changelist')  # Редирект на список магазинов
 
     # Если форма еще не отправлена, показать ее в админке
     return render(request, 'admin/run_task_form.html', {'form': form, 'shops': queryset})
+
 
 
 @admin.register(Shop)
