@@ -12,7 +12,12 @@ User = get_user_model()
 
 class SignalTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create(email="testuser@example.com", is_active=False)
+        # Создаем тестового пользователя
+        self.user = User.objects.create_user(
+            email="test@example.com",
+            password="testpassword",
+            is_active=False
+        )
 
     @patch('backend.tasks.send_password_reset_token.delay')
     def test_password_reset_token_created_signal(self, mock_send_task):
@@ -26,15 +31,17 @@ class SignalTests(TestCase):
 
         mock_send_task.assert_called_once_with(reset_password_token)
 
-    @patch('backend.tasks.send_registration_confirmation.delay')
+    @patch('backend.signals.send_registration_confirmation.delay')
     def test_new_user_registered_signal(self, mock_send_task):
-        """
-        Тестирует, что задача send_registration_confirmation вызывается при создании нового неактивного пользователя.
-        """
-        # Срабатывание сигнала post_save для нового пользователя
-        post_save.send(sender=User, instance=self.user, created=True)
+        # Создаем нового неактивного пользователя
+        user = User.objects.create_user(
+            email="newuser@example.com",
+            password="securepassword",
+            is_active=False
+        )
 
-        mock_send_task.assert_called_once_with(self.user)
+        # Проверяем, что задача была вызвана с правильным аргументом
+        mock_send_task.assert_called_once_with(user_id=user.id)
 
     @patch('backend.tasks.send_new_order_notification.delay')
     def test_new_order_signal(self, mock_send_task):

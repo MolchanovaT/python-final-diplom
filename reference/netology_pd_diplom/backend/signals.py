@@ -19,7 +19,7 @@ def password_reset_token_created(reset_password_token, **kwargs):
 
 @receiver(post_save, sender=User)
 def new_user_registered_signal(instance, created, **kwargs):
-    if created:
+    if created and not instance.is_active:
         # Передаем только user_id, вместо передачи целого объекта instance
         send_registration_confirmation.delay(user_id=instance.id)
 

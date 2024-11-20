@@ -10,7 +10,7 @@ from backend.tasks import (
 from django.core.mail import EmailMultiAlternatives
 from django.test import TestCase
 
-from reference.netology_pd_diplom.backend.models import ProductInfo
+from backend.models import ProductInfo
 
 
 class EmailTaskTests(TestCase):
