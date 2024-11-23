@@ -310,8 +310,16 @@ User = get_user_model()
 
 
 class TaskStatus(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='tasks', verbose_name='Пользователь')
-    task_id = models.CharField(max_length=255, unique=True, verbose_name='ID задачи')
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='tasks',
+        verbose_name='Пользователь',
+        blank=False,  # Явно запрещаем пустое значение
+        null=False  # Запрещаем значение NULL
+    )
+    task_id = models.CharField(max_length=255, unique=True, verbose_name='ID задачи', blank=False,
+                               null=False)
     status = models.CharField(max_length=50, verbose_name='Статус задачи', default='PENDING')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Дата создания')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='Дата обновления')
