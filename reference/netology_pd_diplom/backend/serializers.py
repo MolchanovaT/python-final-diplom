@@ -79,11 +79,15 @@ class OrderItemCreateSerializer(OrderItemSerializer):
 
 class OrderSerializer(serializers.ModelSerializer):
     ordered_items = OrderItemCreateSerializer(read_only=True, many=True)
-
-    total_sum = serializers.IntegerField()
     contact = ContactSerializer(read_only=True)
+    total_sum = serializers.SerializerMethodField()
 
     class Meta:
         model = Order
         fields = ('id', 'ordered_items', 'state', 'dt', 'total_sum', 'contact',)
         read_only_fields = ('id',)
+
+    def get_total_sum(self, obj):
+        # Рассчитываем сумму заказанных позиций
+        return sum(item.quantity * item.product_info.price for item in obj.ordered_items.all())
+
