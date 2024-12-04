@@ -1,3 +1,4 @@
+import json
 from distutils.util import strtobool
 from rest_framework.request import Request
 from django.contrib.auth import authenticate
@@ -5,6 +6,7 @@ from django.contrib.auth.password_validation import validate_password
 from django.db import IntegrityError
 from django.db.models import Q, Sum, F
 from django.http import JsonResponse
+from django.db import transaction
 from rest_framework.authtoken.models import Token
 from rest_framework.generics import ListAPIView
 from rest_framework.response import Response
@@ -20,31 +22,35 @@ from backend.signals import new_user_registered, new_order
 
 from django.shortcuts import redirect, render
 from django.contrib import admin, messages
+from django.contrib.auth.decorators import login_required
 
 from backend.forms import LoadDataForm
 
 
-def run_task_view(request, shop_id):
-    if request.method == 'POST':
+@login_required  # Требует аутентифицированного пользователя
+def run_task_view(request):
+    if request.method == "POST":
         form = LoadDataForm(request.POST)
         if form.is_valid():
             url = form.cleaned_data['url']
-            user_id = request.user.id
-            task = load_data_from_url.apply_async(args=[url, user_id])
 
-            # Создание записи TaskStatus для отслеживания выполнения задачи
+            # Запускаем асинхронную задачу
+            task = load_data_from_url.apply_async(args=[url])
+
+            # Создаем запись TaskStatus для текущего пользователя
             TaskStatus.objects.create(
-                user=request.user,
+                user=request.user,  # Указываем аутентифицированного пользователя
                 task_id=task.id,
-                status='PENDING'
+                status="PENDING"
             )
 
-            messages.info(request, "Задача загружена в очередь")
+            # Устанавливаем сообщение и редиректим
+            messages.success(request, "Задача загружена в очередь")
             return redirect('/admin/backend/shop/')
     else:
         form = LoadDataForm()
 
-    return render(request, 'admin/run_task_form.html', {'form': form})
+    return render(request, "run_task_form.html", {"form": form})
 
 
 class RegisterAccount(APIView):
@@ -56,73 +62,58 @@ class RegisterAccount(APIView):
 
     def post(self, request, *args, **kwargs):
         """
-            Process a POST request and create a new user.
+        Process a POST request and create a new user.
 
-            Args:
-                request (Request): The Django request object.
+        Args:
+            request (Request): The Django request object.
 
-            Returns:
-                JsonResponse: The response indicating the status of the operation and any errors.
-            """
-        # проверяем обязательные аргументы
-        if {'first_name', 'last_name', 'email', 'password', 'company', 'position'}.issubset(request.data):
+        Returns:
+            JsonResponse: The response indicating the status of the operation and any errors.
+        """
+        # Проверяем обязательные аргументы
+        required_fields = {'first_name', 'last_name', 'email', 'password', 'company', 'position'}
+        if not required_fields.issubset(request.data):
+            return JsonResponse({'Status': False, 'Errors': 'Не указаны все необходимые аргументы'})
 
-            # проверяем пароль на сложность
-            sad = 'asd'
-            try:
-                validate_password(request.data['password'])
-            except Exception as password_error:
-                error_array = []
-                # noinspection PyTypeChecker
-                for item in password_error:
-                    error_array.append(item)
-                return JsonResponse({'Status': False, 'Errors': {'password': error_array}})
-            else:
-                # проверяем данные для уникальности имени пользователя
+        # Проверяем данные сериализатора
+        user_serializer = UserSerializer(data=request.data)
+        if not user_serializer.is_valid():
+            return JsonResponse({'Status': False, 'Errors': user_serializer.errors})
 
-                user_serializer = UserSerializer(data=request.data)
-                if user_serializer.is_valid():
-                    # сохраняем пользователя
-                    user = user_serializer.save()
-                    user.set_password(request.data['password'])
-                    user.save()
-                    return JsonResponse({'Status': True})
-                else:
-                    return JsonResponse({'Status': False, 'Errors': user_serializer.errors})
+        # Проверяем пароль на сложность
+        try:
+            validate_password(request.data['password'])
+        except Exception as password_error:
+            error_array = []
+            for item in password_error:
+                error_array.append(item)
+            return JsonResponse({'Status': False, 'Errors': {'password': error_array}})
 
-        return JsonResponse({'Status': False, 'Errors': 'Не указаны все необходимые аргументы'})
+        # Создаём пользователя
+        user = user_serializer.save()
+        user.set_password(request.data['password'])
+        user.save()
+
+        return JsonResponse({'Status': True})
 
 
 class ConfirmAccount(APIView):
-    """
-    Класс для подтверждения почтового адреса
-    """
-
-    # Регистрация методом POST
     def post(self, request, *args, **kwargs):
-        """
-                Подтверждает почтовый адрес пользователя.
-
-                Args:
-                - request (Request): The Django request object.
-
-                Returns:
-                - JsonResponse: The response indicating the status of the operation and any errors.
-                """
-        # проверяем обязательные аргументы
         if {'email', 'token'}.issubset(request.data):
-
             token = ConfirmEmailToken.objects.filter(user__email=request.data['email'],
                                                      key=request.data['token']).first()
             if token:
                 token.user.is_active = True
                 token.user.save()
                 token.delete()
-                return JsonResponse({'Status': True})
+                return JsonResponse({'Status': True}, json_dumps_params={
+                    'ensure_ascii': False})  # Устанавливаем параметр в json_dumps_params
             else:
-                return JsonResponse({'Status': False, 'Errors': 'Неправильно указан токен или email'})
+                return JsonResponse({'Status': False, 'Errors': 'Wrong token or email'},
+                                    json_dumps_params={'ensure_ascii': False})
 
-        return JsonResponse({'Status': False, 'Errors': 'Не указаны все необходимые аргументы'})
+        return JsonResponse({'Status': False, 'Errors': 'Not all required arguments specified'},
+                            json_dumps_params={'ensure_ascii': False})
 
 
 class AccountDetails(APIView):
@@ -317,45 +308,49 @@ class BasketView(APIView):
         return Response(serializer.data)
 
     # редактировать корзину
+
     def post(self, request, *args, **kwargs):
-        """
-               Add an items to the user's basket.
-
-               Args:
-               - request (Request): The Django request object.
-
-               Returns:
-               - JsonResponse: The response indicating the status of the operation and any errors.
-               """
         if not request.user.is_authenticated:
             return JsonResponse({'Status': False, 'Error': 'Log in required'}, status=403)
-
-        items_sting = request.data.get('items')
-        if items_sting:
+        items_string = request.data.get('items')
+        if items_string:
             try:
-                items_dict = load_json(items_sting)
-            except ValueError:
-                return JsonResponse({'Status': False, 'Errors': 'Неверный формат запроса'})
-            else:
+                items_dict = json.loads(items_string)  # Заменила load_json на стандартный json.loads
+                if not isinstance(items_dict, list):  # Проверяем, что передан список объектов
+                    raise ValueError("Items должны быть списком")
+            except (ValueError, TypeError) as e:
+                return JsonResponse({'Status': False, 'Errors': f'Неверный формат запроса: {str(e)}'}, status=400)
+            with transaction.atomic():
                 basket, _ = Order.objects.get_or_create(user_id=request.user.id, state='basket')
                 objects_created = 0
                 for order_item in items_dict:
-                    order_item.update({'order': basket.id})
-                    serializer = OrderItemSerializer(data=order_item)
-                    if serializer.is_valid():
-                        try:
-                            serializer.save()
-                        except IntegrityError as error:
-                            return JsonResponse({'Status': False, 'Errors': str(error)})
+                    if 'product_info' not in order_item or 'quantity' not in order_item:
+                        return JsonResponse(
+                            {'Status': False,
+                             'Errors': 'Поля product_info и quantity обязательны для каждого элемента'},
+                            status=400
+                        )
+
+                    try:
+                        order_item.update({'order': basket.id})
+                        existing_item = OrderItem.objects.filter(order=basket,
+                                                                 product_info_id=order_item.get('product_info')).first()
+                        if existing_item:
+                            existing_item.quantity += order_item.get('quantity', 0)
+                            existing_item.save()
                         else:
-                            objects_created += 1
+                            serializer = OrderItemSerializer(data=order_item)
+                            if serializer.is_valid():
+                                serializer.save()
+                                objects_created += 1
+                            else:
+                                return JsonResponse({'Status': False, 'Errors': serializer.errors}, status=400)
 
-                    else:
-
-                        return JsonResponse({'Status': False, 'Errors': serializer.errors})
-
-                return JsonResponse({'Status': True, 'Создано объектов': objects_created})
-        return JsonResponse({'Status': False, 'Errors': 'Не указаны все необходимые аргументы'})
+                    except Exception as e:
+                        return JsonResponse({'Status': False, 'Errors': f'Ошибка обработки элемента: {str(e)}'},
+                                            status=400)
+                return JsonResponse({'Status': True, 'Создано объектов': objects_created}, status=201)
+        return JsonResponse({'Status': False, 'Errors': 'Не указаны все необходимые аргументы'}, status=400)
 
     # удалить товары из корзины
     def delete(self, request, *args, **kwargs):
@@ -390,32 +385,37 @@ class BasketView(APIView):
     # добавить позиции в корзину
     def put(self, request, *args, **kwargs):
         """
-               Update the items in the user's basket.
+        Update the items in the user's basket.
 
-               Args:
-               - request (Request): The Django request object.
+        Args:
+        - request (Request): The Django request object.
 
-               Returns:
-               - JsonResponse: The response indicating the status of the operation and any errors.
-               """
+        Returns:
+        - JsonResponse: The response indicating the status of the operation and any errors.
+        """
         if not request.user.is_authenticated:
             return JsonResponse({'Status': False, 'Error': 'Log in required'}, status=403)
 
-        items_sting = request.data.get('items')
-        if items_sting:
+        items_string = request.data.get('items')
+        if items_string:
             try:
-                items_dict = load_json(items_sting)
+                # Десериализация строки JSON в список словарей
+                items_dict = load_json(items_string)
+                if not isinstance(items_dict, list):
+                    raise ValueError("Invalid format: 'items' must be a list of dictionaries.")
             except ValueError:
                 return JsonResponse({'Status': False, 'Errors': 'Неверный формат запроса'})
             else:
                 basket, _ = Order.objects.get_or_create(user_id=request.user.id, state='basket')
                 objects_updated = 0
                 for order_item in items_dict:
-                    if type(order_item['id']) == int and type(order_item['quantity']) == int:
+                    # Убедимся, что оба поля ('id' и 'quantity') присутствуют и корректны
+                    if isinstance(order_item.get('id'), int) and isinstance(order_item.get('quantity'), int):
                         objects_updated += OrderItem.objects.filter(order_id=basket.id, id=order_item['id']).update(
                             quantity=order_item['quantity'])
-
-                return JsonResponse({'Status': True, 'Обновлено объектов': objects_updated})
+                    else:
+                        return JsonResponse({'Status': False, 'Errors': 'Неверные данные в элементе'})
+                return JsonResponse({'Status': True, 'Обновлено объектов': objects_updated}, status=200)
         return JsonResponse({'Status': False, 'Errors': 'Не указаны все необходимые аргументы'})
 
 
@@ -515,25 +515,7 @@ class PartnerState(APIView):
 
 
 class PartnerOrders(APIView):
-    """
-    Класс для получения заказов поставщиками
-     Methods:
-    - get: Retrieve the orders associated with the authenticated partner.
-
-    Attributes:
-    - None
-    """
-
     def get(self, request, *args, **kwargs):
-        """
-               Retrieve the orders associated with the authenticated partner.
-
-               Args:
-               - request (Request): The Django request object.
-
-               Returns:
-               - Response: The response containing the orders associated with the partner.
-               """
         if not request.user.is_authenticated:
             return JsonResponse({'Status': False, 'Error': 'Log in required'}, status=403)
 
@@ -541,13 +523,28 @@ class PartnerOrders(APIView):
             return JsonResponse({'Status': False, 'Error': 'Только для магазинов'}, status=403)
 
         order = Order.objects.filter(
-            ordered_items__product_info__shop__user_id=request.user.id).exclude(state='basket').prefetch_related(
+            ordered_items__product_info__shop__user_id=request.user.id
+        ).exclude(state='basket').prefetch_related(
             'ordered_items__product_info__product__category',
-            'ordered_items__product_info__product_parameters__parameter').select_related('contact').annotate(
-            total_sum=Sum(F('ordered_items__quantity') * F('ordered_items__product_info__price'))).distinct()
+            'ordered_items__product_info__product_parameters__parameter'
+        ).select_related('contact').annotate(
+            total_sum=Sum(F('ordered_items__quantity') * F('ordered_items__product_info__price'))
+        ).distinct()
 
-        serializer = OrderSerializer(order, many=True)
-        return Response(serializer.data)
+        # Возвращаем 404, если заказы не найдены
+        if not order.exists():
+            return JsonResponse({'Status': False, 'Error': 'No orders found'}, status=404)
+
+        # Сериализация данных вручную
+        orders_data = []
+        for o in order:
+            orders_data.append({
+                'id': o.id,
+                'user_id': o.user.id,
+                'total_sum': o.total_sum,
+            })
+
+        return JsonResponse(orders_data, safe=False, status=200)
 
 
 class ContactView(APIView):
@@ -585,19 +582,19 @@ class ContactView(APIView):
     # добавить новый контакт
     def post(self, request, *args, **kwargs):
         """
-               Create a new contact for the authenticated user.
+        Create a new contact for the authenticated user.
 
-               Args:
-               - request (Request): The Django request object.
+        Args:
+        - request (Request): The Django request object.
 
-               Returns:
-               - JsonResponse: The response indicating the status of the operation and any errors.
-               """
+        Returns:
+        - JsonResponse: The response indicating the status of the operation and any errors.
+        """
         if not request.user.is_authenticated:
             return JsonResponse({'Status': False, 'Error': 'Log in required'}, status=403)
 
         if {'city', 'street', 'phone'}.issubset(request.data):
-            request.data._mutable = True
+            # Вместо использования _mutable, просто обновляем request.data
             request.data.update({'user': request.user.id})
             serializer = ContactSerializer(data=request.data)
 
@@ -639,32 +636,32 @@ class ContactView(APIView):
         return JsonResponse({'Status': False, 'Errors': 'Не указаны все необходимые аргументы'})
 
     # редактировать контакт
+    # редактировать контакт
     def put(self, request, *args, **kwargs):
         if not request.user.is_authenticated:
-            """
-                   Update the contact information of the authenticated user.
-
-                   Args:
-                   - request (Request): The Django request object.
-
-                   Returns:
-                   - JsonResponse: The response indicating the status of the operation and any errors.
-                   """
             return JsonResponse({'Status': False, 'Error': 'Log in required'}, status=403)
 
-        if 'id' in request.data:
-            if request.data['id'].isdigit():
-                contact = Contact.objects.filter(id=request.data['id'], user_id=request.user.id).first()
-                print(contact)
-                if contact:
-                    serializer = ContactSerializer(contact, data=request.data, partial=True)
-                    if serializer.is_valid():
-                        serializer.save()
-                        return JsonResponse({'Status': True})
-                    else:
-                        return JsonResponse({'Status': False, 'Errors': serializer.errors})
+        # Проверяем, что указан ID контакта
+        contact_id = request.data.get('id')
+        if not contact_id:
+            return JsonResponse({'Status': False, 'Errors': 'Missing required ID'}, status=400)
 
-        return JsonResponse({'Status': False, 'Errors': 'Не указаны все необходимые аргументы'})
+        # Проверяем, существует ли контакт
+        contact = Contact.objects.filter(id=contact_id, user_id=request.user.id).first()
+        if not contact:
+            return JsonResponse({'Status': False, 'Errors': 'Contact not found'}, status=404)
+
+        # Проверяем, что указаны данные для обновления
+        if len(request.data) <= 1:  # Если передан только ID
+            return JsonResponse({'Status': False, 'Errors': 'Not all required arguments specified'}, status=400)
+
+        # Обновляем контакт через сериализатор
+        serializer = ContactSerializer(contact, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return JsonResponse({'Status': True})
+        else:
+            return JsonResponse({'Status': False, 'Errors': serializer.errors}, status=400)
 
 
 class OrderView(APIView):
@@ -705,31 +702,25 @@ class OrderView(APIView):
     # разместить заказ из корзины
     def post(self, request, *args, **kwargs):
         """
-               Put an order and send a notification.
-
-               Args:
-               - request (Request): The Django request object.
-
-               Returns:
-               - JsonResponse: The response indicating the status of the operation and any errors.
-               """
+        Разместить заказ из корзины.
+        """
         if not request.user.is_authenticated:
             return JsonResponse({'Status': False, 'Error': 'Log in required'}, status=403)
 
         if {'id', 'contact'}.issubset(request.data):
-            if request.data['id'].isdigit():
+            # Проверяем, что id является числом
+            if not request.data['id'].isdigit():
+                return JsonResponse({'Status': False, 'Errors': 'Invalid id format'}, status=400)
 
-                try:
-                    is_updated = Order.objects.filter(
-                        user_id=request.user.id, id=request.data['id']).update(
-                        contact_id=request.data['contact'],
-                        state='new')
-                except IntegrityError as error:
-                    print(error)
-                    return JsonResponse({'Status': False, 'Errors': 'Неправильно указаны аргументы'})
-                else:
-                    if is_updated:
-                        new_order.send(sender=self.__class__, user_id=request.user.id)
-                        return JsonResponse({'Status': True})
+            try:
+                is_updated = Order.objects.filter(
+                    user_id=request.user.id, id=request.data['id']
+                ).update(contact_id=request.data['contact'], state='new')
+            except IntegrityError as error:
+                return JsonResponse({'Status': False, 'Errors': 'Invalid arguments'}, status=400)
+            else:
+                if is_updated:
+                    new_order.send(sender=self.__class__, user_id=request.user.id)
+                    return JsonResponse({'Status': True})
 
-        return JsonResponse({'Status': False, 'Errors': 'Не указаны все необходимые аргументы'})
+        return JsonResponse({'Status': False, 'Errors': 'Missing required arguments'}, status=400)

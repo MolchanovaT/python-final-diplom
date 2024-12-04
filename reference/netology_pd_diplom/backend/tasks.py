@@ -64,12 +64,18 @@ def send_new_order_notification(user_id):
 
 
 @shared_task(bind=True)
-def load_data_from_url(self, url, user_id, task_id):
+def load_data_from_url(self, url, user_id):
     task_status = None
     try:
-        print("Starting task...")
-        task_status = TaskStatus.objects.get(task_id=task_id)
-        print(f"Initial status: {task_status.status}")  # Логирование начального статуса
+        # Получаем уникальный task_id от Celery
+        task_id = self.request.id
+        print(f"Task ID: {task_id}")
+
+        # Находим или создаём объект TaskStatus
+        task_status, _ = TaskStatus.objects.get_or_create(task_id=task_id, defaults={'status': 'PENDING'})
+        print(f"Initial status: {task_status.status}")
+
+        # Обновляем статус на IN_PROGRESS
         task_status.status = 'IN_PROGRESS'
         task_status.save(update_fields=['status'])
 
@@ -82,10 +88,13 @@ def load_data_from_url(self, url, user_id, task_id):
         response.raise_for_status()  # Проверка на ошибки HTTP
         data = yaml.load(response.content, Loader=yaml.Loader)
 
-        # Создаём магазин
-        shop, _ = Shop.objects.get_or_create(name=data['shop'], user_id=user_id)
+        # Получаем пользователя по user_id
+        user = User.objects.get(id=user_id)  # Восстановление объекта пользователя по ID
 
-        # Добавляем категории
+        # Создаём магазин
+        shop, _ = Shop.objects.get_or_create(name=data['shop'], user=user)  # Используем объект user
+
+        # Добавляем категории и товары...
         for category in data['categories']:
             category_object, _ = Category.objects.get_or_create(id=category['id'], name=category['name'])
             category_object.shops.add(shop.id)
@@ -116,29 +125,24 @@ def load_data_from_url(self, url, user_id, task_id):
                     value=value
                 )
 
-        print(f"Before successful status update: {task_status.status}")
         # Успешное завершение задачи
-        if task_status:
-            task_status.status = 'SUCCESS'
-            task_status.save(update_fields=['status'])
-        print(f"Task status after success: {task_status.status}")
+        task_status.status = 'SUCCESS'
+        task_status.save(update_fields=['status'])
 
     except TaskStatus.DoesNotExist:
-        # Если задача не найдена, возвращаем ошибку
         return {'Status': 'FAILED', 'Error': 'TaskStatus not found'}
 
     except Exception as e:
-        # Обновляем статус на "FAILED" при возникновении ошибки
+        # Обновляем статус на "FAILED" при ошибке
         if task_status:
             task_status.status = 'FAILED'
             task_status.error_message = str(e)
             task_status.save(update_fields=['status', 'error_message'])
 
     finally:
-        # Гарантируем сохранение статуса в любом случае
+        # Гарантируем обновление статуса
         if task_status:
-            print(f"Final status in finally block: {task_status.status}")  # Логируем финальный статус
             task_status.save(update_fields=['status', 'error_message'])
 
-    # Возвращаем статус задачи
     return {'Status': task_status.status}
+

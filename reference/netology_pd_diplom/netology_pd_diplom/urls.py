@@ -20,5 +20,5 @@ from backend.views import run_task_view
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('admin/run_task/<int:shop_id>/', run_task_view, name='run_task_view'),
-    path('api/v1/', include('backend.urls', namespace='backend'))
+    path('api/v1/', include('backend.urls'))
 ]
