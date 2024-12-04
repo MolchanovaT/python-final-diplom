@@ -1,8 +1,10 @@
+from django.core.exceptions import ObjectDoesNotExist
 from django.core.mail import EmailMultiAlternatives
 from django.conf import settings
 from celery import shared_task
 from django.core.validators import URLValidator
 from requests import get
+import requests
 import yaml
 from backend.models import Shop, Category, ProductInfo, Product, Parameter, ProductParameter, TaskStatus, \
     ConfirmEmailToken, User
@@ -65,84 +67,55 @@ def send_new_order_notification(user_id):
 
 @shared_task(bind=True)
 def load_data_from_url(self, url, user_id):
-    task_status = None
     try:
-        # Получаем уникальный task_id от Celery
-        task_id = self.request.id
-        print(f"Task ID: {task_id}")
+        user = User.objects.get(id=user_id)
+    except ObjectDoesNotExist:
+        return {"Status": "FAILED", "Error": "User not found"}
 
-        # Находим или создаём объект TaskStatus
-        task_status, _ = TaskStatus.objects.get_or_create(task_id=task_id, defaults={'status': 'PENDING'})
-        print(f"Initial status: {task_status.status}")
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        data = yaml.safe_load(response.content)
+    except requests.RequestException as e:
+        return {"Status": "FAILED", "Error": f"Invalid URL or network error: {str(e)}"}
+    except yaml.YAMLError as e:
+        return {"Status": "FAILED", "Error": f"YAML parsing error: {str(e)}"}
 
-        # Обновляем статус на IN_PROGRESS
-        task_status.status = 'IN_PROGRESS'
-        task_status.save(update_fields=['status'])
+    try:
+        shop_data = data.get("shop")
+        shop = Shop.objects.create(name=shop_data["name"], user=user)
 
-        # Проверяем валидность URL
-        validate_url = URLValidator()
-        validate_url(url)
+        for category_data in data.get("categories", []):
+            category = Category.objects.create(name=category_data["name"])
+            category.shops.add(shop)
 
-        # Загружаем данные из URL
-        response = get(url)
-        response.raise_for_status()  # Проверка на ошибки HTTP
-        data = yaml.load(response.content, Loader=yaml.Loader)
+        for product_data in data.get("products", []):
+            category = Category.objects.get(id=product_data["category"])
+            product = Product.objects.create(name=product_data["name"], category=category)
 
-        # Получаем пользователя по user_id
-        user = User.objects.get(id=user_id)  # Восстановление объекта пользователя по ID
+            # Проверка наличия external_id
+            external_id = product_data.get("external_id", None)
+            if not external_id:
+                return {"Status": "FAILED", "Error": f"Missing external_id for product {product_data['name']}"}
 
-        # Создаём магазин
-        shop, _ = Shop.objects.get_or_create(name=data['shop'], user=user)  # Используем объект user
-
-        # Добавляем категории и товары...
-        for category in data['categories']:
-            category_object, _ = Category.objects.get_or_create(id=category['id'], name=category['name'])
-            category_object.shops.add(shop.id)
-            category_object.save()
-
-        # Удаляем старую информацию о товарах
-        ProductInfo.objects.filter(shop_id=shop.id).delete()
-
-        # Добавляем товары
-        for item in data['goods']:
-            product, _ = Product.objects.get_or_create(name=item['name'], category_id=item['category'])
+            # Создаем ProductInfo с учетом внешнего ID
             product_info = ProductInfo.objects.create(
-                product_id=product.id,
-                external_id=item['id'],
-                model=item['model'],
-                price=item['price'],
-                price_rrc=item['price_rrc'],
-                quantity=item['quantity'],
-                shop_id=shop.id
+                product=product,
+                shop=shop,
+                model=product_data["model"],
+                price=product_data["price"],
+                price_rrc=product_data.get("price_rrc", product_data["price"]),
+                external_id=external_id,
+                quantity=product_data.get("quantity", 0),  # Если количество не указано, ставим 0
             )
 
-            # Добавляем параметры товара
-            for name, value in item['parameters'].items():
-                parameter_object, _ = Parameter.objects.get_or_create(name=name)
+            for param_name, param_value in product_data.get("parameters", {}).items():
+                parameter, _ = Parameter.objects.get_or_create(name=param_name)
                 ProductParameter.objects.create(
-                    product_info_id=product_info.id,
-                    parameter_id=parameter_object.id,
-                    value=value
+                    product_info=product_info, parameter=parameter, value=param_value
                 )
 
-        # Успешное завершение задачи
-        task_status.status = 'SUCCESS'
-        task_status.save(update_fields=['status'])
-
-    except TaskStatus.DoesNotExist:
-        return {'Status': 'FAILED', 'Error': 'TaskStatus not found'}
-
+        TaskStatus.objects.create(task_id=self.request.id, user=user, status="SUCCESS")
+        return {"Status": "SUCCESS"}
     except Exception as e:
-        # Обновляем статус на "FAILED" при ошибке
-        if task_status:
-            task_status.status = 'FAILED'
-            task_status.error_message = str(e)
-            task_status.save(update_fields=['status', 'error_message'])
-
-    finally:
-        # Гарантируем обновление статуса
-        if task_status:
-            task_status.save(update_fields=['status', 'error_message'])
-
-    return {'Status': task_status.status}
-
+        return {"Status": "FAILED", "Error": f"Processing error: {str(e)}"}
