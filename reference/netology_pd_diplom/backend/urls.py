@@ -5,6 +5,8 @@ from backend.views import PartnerUpdate, RegisterAccount, LoginAccount, Category
     BasketView, \
     AccountDetails, ContactView, OrderView, PartnerState, PartnerOrders, ConfirmAccount, run_task_view
 
+from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
+
 # app_name = 'backend'
 urlpatterns = [
     path('partner/update', PartnerUpdate.as_view(), name='partner-update'),
@@ -23,4 +25,10 @@ urlpatterns = [
     path('basket', BasketView.as_view(), name='basket'),
     path('order', OrderView.as_view(), name='order'),
     path('run_task', run_task_view, name='run-task'),
+    # URL для получения схемы OpenAPI (JSON)
+    path('schema', SpectacularAPIView.as_view(), name='schema'),
+    # Swagger UI
+    path('docs/swagger', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
+    # Redoc
+    path('docs/redoc', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
 ]

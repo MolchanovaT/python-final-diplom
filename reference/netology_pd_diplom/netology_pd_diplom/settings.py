@@ -38,6 +38,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework.authtoken',
     'django_rest_passwordreset',
+    'drf_spectacular',
     'backend',
 ]
 
@@ -152,6 +153,7 @@ REST_FRAMEWORK = {
 
         'rest_framework.authentication.TokenAuthentication',
     ),
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
 
 AUTHENTICATION_BACKENDS = (
@@ -166,3 +168,10 @@ CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_BACKEND = 'redis://redis:6379/0'
 CELERY_TIMEZONE = 'UTC'
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'API для проекта интернет магазина',
+    'DESCRIPTION': 'Документация OpenAPI, сгенерированная с помощью DRF-Spectacular',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+}
