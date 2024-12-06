@@ -26,6 +26,36 @@ from django.contrib.auth.decorators import login_required
 
 from backend.forms import LoadDataForm
 
+from social_core.exceptions import SocialAuthBaseException
+
+
+def social_auth_complete(request):
+    """
+    Обработчик после успешного входа через социальные сети.
+    """
+    user = request.user
+    if user.is_authenticated:
+        token, _ = Token.objects.get_or_create(user=user)
+        return JsonResponse({
+            'Status': True,
+            'Token': token.key,
+            'User': {
+                'id': user.id,
+                'username': user.username,
+                'email': user.email,
+            }
+        })
+    return JsonResponse({'Status': False, 'Error': 'Авторизация не удалась'}, status=401)
+
+
+def social_auth_exception_handler(request, exception):
+    """
+    Обработчик исключений при авторизации через соцсети.
+    """
+    if isinstance(exception, SocialAuthBaseException):
+        return JsonResponse({'Status': False, 'Error': str(exception)}, status=400)
+    return JsonResponse({'Status': False, 'Error': 'Неизвестная ошибка'}, status=500)
+
 
 @login_required  # Требует аутентифицированного пользователя
 def run_task_view(request):

@@ -15,10 +15,15 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
-from backend.views import run_task_view
+from backend.views import run_task_view, social_auth_complete
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('admin/run_task/<int:shop_id>/', run_task_view, name='run_task_view'),
-    path('api/v1/', include('backend.urls'))
+    # Социальная авторизация
+    path('auth/', include('social_django.urls', namespace='social')),
+    path('auth/complete/', social_auth_complete, name='social-auth-complete'),
+    # Основное API
+    path('api/v1/', include('backend.urls')),
 ]
+
