@@ -154,6 +154,14 @@ REST_FRAMEWORK = {
         'rest_framework.authentication.TokenAuthentication',
     ),
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',  # Для анонимных пользователей
+        'rest_framework.throttling.UserRateThrottle',  # Для аутентифицированных пользователей
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '10/min',  # 10 запросов в минуту для анонимных пользователей
+        'user': '100/hour',  # 100 запросов в час для аутентифицированных пользователей
+    },
 }
 
 AUTHENTICATION_BACKENDS = (
