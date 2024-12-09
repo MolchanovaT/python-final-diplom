@@ -30,6 +30,7 @@ ALLOWED_HOSTS = ['*']
 # Application definition
 
 INSTALLED_APPS = [
+    'baton',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -54,6 +55,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'social_django.middleware.SocialAuthExceptionMiddleware',
+    'baton.middleware.BatonMiddleware',
 ]
 
 ROOT_URLCONF = 'netology_pd_diplom.urls'
@@ -70,6 +72,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'baton.context_processors.context_processors',
             ],
         },
     },
@@ -187,7 +190,6 @@ SOCIAL_AUTH_RAISE_EXCEPTIONS = False
 SOCIAL_AUTH_EXCEPTION_HANDLER = 'backend.views.social_auth_exception_handler'
 LOGIN_REDIRECT_URL = '/auth/complete/'  # Этот URL вызовет обработчик `social_auth_complete`.
 
-
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Настройки Celery
@@ -202,4 +204,13 @@ SPECTACULAR_SETTINGS = {
     'DESCRIPTION': 'Документация OpenAPI, сгенерированная с помощью DRF-Spectacular',
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
+}
+
+BATON = {
+    'SITE_HEADER': 'Моя админка',
+    'SITE_TITLE': 'Моя админка',
+    'INDEX_TITLE': 'Добро пожаловать в админку',
+    'SUPPORT_HREF': 'molchanovatatiana33@gmail.com',
+    'COPYRIGHT': 'Copyright © 2024 by Molchanova Tatiana',
+    'POWERED_BY': 'Molchanova Tatiana',
 }
