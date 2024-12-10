@@ -13,12 +13,14 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
-from django.contrib import admin
+# from django.contrib import admin
+from baton.autodiscover import admin
 from django.urls import path, include
 from backend.views import run_task_view, social_auth_complete
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('baton/', include('baton.urls')),
     path('admin/run_task/<int:shop_id>/', run_task_view, name='run_task_view'),
     # Социальная авторизация
     path('auth/', include('social_django.urls', namespace='social')),

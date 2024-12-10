@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     'drf_spectacular',
     'social_django',
     'backend',
+    'baton.autodiscover',
 ]
 
 MIDDLEWARE = [
@@ -55,7 +56,6 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'social_django.middleware.SocialAuthExceptionMiddleware',
-    'baton.middleware.BatonMiddleware',
 ]
 
 ROOT_URLCONF = 'netology_pd_diplom.urls'
@@ -72,7 +72,6 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
-                'baton.context_processors.context_processors',
             ],
         },
     },
@@ -188,7 +187,7 @@ SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET = config('SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET')
 
 SOCIAL_AUTH_RAISE_EXCEPTIONS = False
 SOCIAL_AUTH_EXCEPTION_HANDLER = 'backend.views.social_auth_exception_handler'
-LOGIN_REDIRECT_URL = '/auth/complete/'  # Этот URL вызовет обработчик `social_auth_complete`.
+# LOGIN_REDIRECT_URL = '/auth/complete/'  # Этот URL вызовет обработчик `social_auth_complete`.
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
